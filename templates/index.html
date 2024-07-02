@@ -7,6 +7,8 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js" integrity="sha512-q/dWJ3kcmjBLU4Qc47E4A9kTB4m3wuTY7vkFJDTZKjTs8jhyGQnaUrxa0Ytd0ssMZhbNua9hE+E7Qv1j+DyZwA==" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
 </head>
 <body>
     <div class="flex-drawing">
@@ -17,5 +19,64 @@
         </div>
     </div>
     <script src="{{ url_for('static', filename='script.js') }}"></script>
+    <script>
+        const URL = "https://teachablemachine.withgoogle.com/models/cdF8lPZUrz/";
+        let model, labelContainer, maxPredictions;
+    
+        // Load the image model
+        async function init() {
+            const modelURL = URL + "model.json";
+            const metadataURL = URL + "metadata.json";
+    
+            model = await tmImage.load(modelURL, metadataURL);
+            maxPredictions = model.getTotalClasses();
+    
+            labelContainer = document.getElementById("label-container");
+            for (let i = 0; i < maxPredictions; i++) {
+                labelContainer.appendChild(document.createElement("div"));
+            }
+        }
+
+        init();
+    
+        async function loadAndPredictImage(imagePath) {
+            return new Promise((resolve, reject) => { 
+                const imageElement = new Image();
+                imageElement.src = imagePath;
+                imageElement.onload = async () => {
+                    const prediction = await model.predict(imageElement);
+                    let finalPrediction = "Unknown";
+                    for (let i = 0; i < maxPredictions; i++) {
+                        if (prediction[i].probability > 0.5) {
+                            finalPrediction = prediction[i].className;
+                            break; 
+                        }
+                    }
+                    resolve(finalPrediction);
+                };
+                imageElement.onerror = reject;
+            });
+        }
+        
+        document.addEventListener('DOMContentLoaded', (event) => {
+            const socket = io.connect(location.protocol + '//' + document.domain + ':' + location.port);
+            socket.on('connect', () => {
+                console.log('Connected to the WebSocket server');
+            });
+            socket.on('image_saved', async data => {
+                if (data.status === 'success') {
+                    console.log('Image saved successfully');
+                    let pred = await loadAndPredictImage("drawing.png");
+                    console.log(`Prediction: ${pred}`);
+                    Swal.fire({
+                        title: 'My prediction is:',
+                        text: pred,
+                        icon: 'success',
+                        showConfirmButton: false,
+                    });
+                }
+            });
+        });
+    </script>
 </body>
 </html>
